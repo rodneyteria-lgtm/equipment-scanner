@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<!--
+  Equipment Scanner - Scanner Page
+  Version 1.2.0
+
+  Host this file as "index.html" on an https static host (for example, GitHub Pages).
+  It does not run inside Apps Script. Apps Script blocks the live camera.
+
+  Before upload: set API_URL (in the script below) to the Apps Script web app URL.
+  The URL ends in /exec.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Equipment Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1B2730;
+    --ink-soft: #4F5E68;
+    --paper: #FFFFFF;
+    --ground: #E9EDEC;
+    --line: #C9D1D0;
+    --field-line: #8C9A9E;
+    --steel: #24506E;
+    --steel-dark: #1A3B52;
+    --steel-bg: #E6EEF3;
+    --hivis: #F5C400;
+    --go: #1E7F46;
+    --go-dark: #166236;
+    --go-bg: #E3F2E8;
+    --hold: #8A5A00;
+    --hold-bg: #FDF1D6;
+    --stop: #B42318;
+    --stop-bg: #FCE7E5;
+    --radius: 6px;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'Atkinson Hyperlegible', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.45;
+    padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+  }
+
+  h1, h2, p { margin: 0; }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--ink);
+    color: #FFFFFF;
+  }
+  .topbar h1 { font-size: 1.3rem; font-weight: 700; }
+  .btn-bar {
+    min-height: 44px;
+    padding: 8px 14px;
+    font: inherit;
+    font-weight: 700;
+    color: #FFFFFF;
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .btn-bar[aria-pressed="false"] { color: #C9D3D6; border-color: rgba(255, 255, 255, 0.3); }
+
+  /* Layout */
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 900px) {
+    .layout {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+      grid-template-areas: "details list" "scanner list";
+      align-items: start;
+    }
+    .panel-details { grid-area: details; }
+    .panel-scanner { grid-area: scanner; }
+    .panel-list { grid-area: list; }
+  }
+
+  .panel {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .panel h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; }
+
+  /* Fields */
+  .field-row { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 520px) { .field-row { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
+
+  .field label { display: block; font-weight: 700; margin-bottom: 6px; }
+  .field input,
+  .field select {
+    display: block;
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 12px;
+    font: inherit;
+    color: var(--ink);
+    background: #FFFFFF;
+    border: 1px solid var(--field-line);
+    border-radius: var(--radius);
+  }
+  .field input:focus,
+  .field select:focus { outline: 3px solid var(--hivis); outline-offset: 1px; border-color: var(--ink); }
+  .field.has-error input,
+  .field.has-error select { border: 2px solid var(--stop); }
+  .field-error { margin-top: 6px; color: var(--stop); font-weight: 700; font-size: 0.95rem; }
+  .help { margin-top: 6px; color: var(--ink-soft); font-size: 0.92rem; }
+
+  /* Buttons */
+  .btn {
+    min-height: 48px;
+    padding: 10px 16px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--steel);
+    background: #FFFFFF;
+    border: 2px solid var(--steel);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .btn:hover { background: var(--steel-bg); }
+  .btn-primary { color: #FFFFFF; background: var(--steel); }
+  .btn-primary:hover { background: var(--steel-dark); border-color: var(--steel-dark); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-text {
+    min-height: 44px;
+    padding: 8px 10px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--stop);
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .btn-text:disabled { color: var(--ink-soft); opacity: 0.5; cursor: not-allowed; }
+  .btn-text.is-armed { color: #FFFFFF; background: var(--stop); }
+  button:focus-visible { outline: 3px solid var(--hivis); outline-offset: 2px; }
+
+  /* Viewfinder */
+  .viewfinder {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    margin: 0 auto;
+    aspect-ratio: 1 / 1;
+    background: #1E2A31;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .viewfinder video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .viewfinder::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 10px solid transparent;
+    border-radius: var(--radius);
+    transition: border-color 0.12s;
+    pointer-events: none;
+  }
+  .viewfinder[data-flash="ok"]::after { border-color: #2FBF6A; }
+  .viewfinder[data-flash="warn"]::after { border-color: #F59E0B; }
+  .viewfinder[data-flash="error"]::after { border-color: #E5483B; }
+
+  .corners span {
+    position: absolute;
+    width: 20%;
+    height: 20%;
+    border: 0 solid var(--hivis);
+    pointer-events: none;
+  }
+  .corners span:nth-child(1) { top: 9%; left: 9%; border-top-width: 7px; border-left-width: 7px; }
+  .corners span:nth-child(2) { top: 9%; right: 9%; border-top-width: 7px; border-right-width: 7px; }
+  .corners span:nth-child(3) { bottom: 9%; left: 9%; border-bottom-width: 7px; border-left-width: 7px; }
+  .corners span:nth-child(4) { bottom: 9%; right: 9%; border-bottom-width: 7px; border-right-width: 7px; }
+
+  .viewfinder-idle {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    color: #C9D3D6;
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+  .viewfinder.is-live .viewfinder-idle { display: none; }
+
+  .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .button-row .btn { flex: 1 1 130px; }
+
+  /* Status */
+  .status {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: #F3F5F5;
+    border-left: 6px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .status--ok { background: var(--go-bg); border-left-color: var(--go); }
+  .status--warn { background: var(--hold-bg); border-left-color: var(--hold); }
+  .status--error { background: var(--stop-bg); border-left-color: var(--stop); }
+  .status--info { background: var(--steel-bg); border-left-color: var(--steel); }
+  .status-title { font-weight: 700; font-size: 1.05rem; }
+  .status-detail { margin-top: 2px; color: var(--ink-soft); overflow-wrap: anywhere; }
+
+  .manual { margin-top: 16px; }
+  .inline { display: flex; gap: 8px; }
+  .inline input { flex: 1 1 auto; min-width: 0; }
+  .inline .btn { flex: 0 0 auto; }
+
+  /* List */
+  .list-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .list-head h2 { margin-bottom: 0; }
+  .count { font-variant-numeric: tabular-nums; }
+
+  .items { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  .item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "tag remove" "body body";
+    gap: 6px 12px;
+    align-items: start;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  @media (min-width: 520px) {
+    .item {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas: "tag body remove";
+    }
+  }
+  .item-tag {
+    grid-area: tag;
+    justify-self: start;
+    padding: 3px 9px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #FFFFFF;
+    background: var(--ink);
+    border-radius: 4px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .item-body { grid-area: body; min-width: 0; }
+  .item-title { font-weight: 700; overflow-wrap: anywhere; }
+  .item-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
+    margin-top: 4px;
+    font-size: 0.93rem;
+  }
+  .meta-label { color: var(--ink-soft); }
+  .meta-value { overflow-wrap: anywhere; }
+  .item-remove {
+    grid-area: remove;
+    min-height: 44px;
+    padding: 8px 12px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--stop);
+    background: #FFFFFF;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .item-remove:hover { background: var(--stop-bg); border-color: var(--stop); }
+
+  .item.is-new { animation: rowNew 1.4s ease-out; }
+  .item.is-hit { animation: rowHit 1.4s ease-out; }
+  @keyframes rowNew { from { background: var(--go-bg); } to { background: transparent; } }
+  @keyframes rowHit { from { background: var(--hold-bg); } to { background: transparent; } }
+
+  .empty { padding: 28px 8px; text-align: center; color: var(--ink-soft); }
+  .empty-title { font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+
+  .version { margin-top: 16px; font-size: 0.85rem; color: var(--ink-soft); }
+
+  /* Submit bar */
+  .submit-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    background: #FFFFFF;
+    border-top: 1px solid var(--line);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .submit-inner { max-width: 1100px; margin: 0 auto; }
+  .submit-message { margin-bottom: 8px; color: var(--stop); font-weight: 700; font-size: 0.95rem; }
+  .btn-submit {
+    display: block;
+    width: 100%;
+    min-height: 56px;
+    font-size: 1.15rem;
+    color: #FFFFFF;
+    background: var(--go);
+    border-color: var(--go);
+  }
+  .btn-submit:hover { background: var(--go-dark); border-color: var(--go-dark); }
+  @media (min-width: 900px) { .btn-submit { width: 420px; margin-left: auto; } }
+
+  /* Done dialog */
+  .done {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(27, 39, 48, 0.65);
+  }
+  .done-box {
+    width: 100%;
+    max-width: 420px;
+    padding: 24px;
+    background: #FFFFFF;
+    border-top: 8px solid var(--go);
+    border-radius: var(--radius);
+  }
+  .done-box.is-repeat { border-top-color: var(--hold); }
+  .done-box h2 { font-size: 1.35rem; margin-bottom: 6px; }
+  .done-list {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 16px;
+    margin: 16px 0 20px;
+  }
+  .done-list dt { color: var(--ink-soft); }
+  .done-list dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+  .done-box .btn { width: 100%; }
+  .load { z-index: 30; background: var(--ground); }
+  .load-box { border-top-color: var(--steel); }
+  .load-box.is-error { border-top-color: var(--stop); }
+  .load-box p { overflow-wrap: anywhere; }
+  .load-box .btn { margin-top: 20px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .item.is-new, .item.is-hit { animation: none; }
+    .viewfinder::after { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1 id="appTitle">Equipment Scanner</h1>
+  <button id="soundBtn" class="btn-bar" type="button" aria-pressed="true">Sound On</button>
+</header>
+
+<main class="layout">
+
+  <section class="panel panel-details" aria-labelledby="detailsHeading">
+    <h2 id="detailsHeading">Submission Details</h2>
+    <div class="field-row">
+      <div class="field" id="crewField">
+        <label for="crewInput">Crew</label>
+        <div id="crewSlot"></div>
+        <p class="field-error" id="crewError" hidden></p>
+      </div>
+      <div class="field" id="dateField">
+        <label for="dateInput">Date</label>
+        <input id="dateInput" type="date">
+        <p class="field-error" id="dateError" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel panel-scanner" aria-labelledby="scanHeading">
+    <h2 id="scanHeading">Scan Equipment</h2>
+    <div class="viewfinder" id="viewfinder">
+      <video id="video" playsinline muted autoplay></video>
+      <div class="corners" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <div class="viewfinder-idle" id="viewfinderIdle">Camera Off</div>
+    </div>
+
+    <div class="button-row">
+      <button id="cameraBtn" class="btn btn-primary" type="button">Start Camera</button>
+      <button id="torchBtn" class="btn" type="button" aria-pressed="false" hidden>Light On</button>
+      <button id="photoBtn" class="btn" type="button">Photo Scan</button>
+      <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+    </div>
+
+    <div class="status status--info" id="status" role="status" aria-live="polite">
+      <p class="status-title" id="statusTitle">Ready</p>
+      <p class="status-detail" id="statusDetail">Select the crew, then press Start Camera.</p>
+    </div>
+
+    <div class="field manual">
+      <label for="manualInput">Scanner or Manual Entry</label>
+      <div class="inline">
+        <input id="manualInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button id="manualBtn" class="btn" type="button">Add</button>
+      </div>
+      <p class="help">Paste a QR link, or click here and scan with a USB or Bluetooth scanner.</p>
+    </div>
+  </section>
+
+  <section class="panel panel-list" aria-labelledby="listHeading">
+    <div class="list-head">
+      <h2 id="listHeading">Scanned Equipment (<span class="count" id="countText">0</span>)</h2>
+      <button id="clearBtn" class="btn-text" type="button" disabled>Clear All</button>
+    </div>
+    <ul class="items" id="itemList" hidden></ul>
+    <div class="empty" id="emptyState">
+      <p class="empty-title">No Equipment Scanned</p>
+      <p>Scanned items appear here. The newest item is at the top.</p>
+    </div>
+    <p class="version" id="versionText"></p>
+  </section>
+
+</main>
+
+<div class="submit-bar">
+  <div class="submit-inner">
+    <p class="submit-message" id="submitMessage" role="alert" hidden></p>
+    <button id="submitBtn" class="btn btn-submit" type="button" disabled>Submit</button>
+  </div>
+</div>
+
+<div class="done" id="doneOverlay" role="dialog" aria-modal="true" aria-labelledby="doneTitle" hidden>
+  <div class="done-box" id="doneBox">
+    <h2 id="doneTitle">Submitted</h2>
+    <p id="doneDetail"></p>
+    <dl class="done-list" id="doneList"></dl>
+    <button id="doneBtn" class="btn btn-primary" type="button">Start New List</button>
+  </div>
+</div>
+
+<div class="done load" id="loadOverlay" role="dialog" aria-modal="true" aria-labelledby="loadTitle">
+  <div class="done-box load-box" id="loadBox">
+    <h2 id="loadTitle">Loading Settings</h2>
+    <p id="loadDetail">Connecting to the server.</p>
+    <button id="retryBtn" class="btn btn-primary" type="button" hidden>Try Again</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Connection ---------- */
+  var PAGE_VERSION = '1.2.0';
+  // Apps Script web app URL. Deploy > Manage deployments > copy the URL ending in /exec.
+  var API_URL = 'https://script.google.com/macros/s/AKfycby2qRRSDkm_UQ53RXIVK4d1s1CxFjYPBWlKJc8OkJdYDZEOor1sX66VtKizBDxBdvSL/exec';
+
+  var BOOT = null;  // Settings from the server (crews, fields, rules).
+
+  /* ---------- Browser Settings ---------- */
+  var SAME_CODE_COOLDOWN_MS = 2500;  // Ignore the same code while it stays in view.
+  var PAUSE_AFTER_ADD_MS = 700;      // Short pause after each added item.
+  var SCAN_INTERVAL_MS = 120;        // Time between camera frame checks.
+  var LIVE_DECODE_SIZE = 720;        // Max pixel size for live decoding with jsQR.
+  var DRAFT_KEY = 'equipmentScanner.draft.v1';
+  var SOUND_KEY = 'equipmentScanner.sound.v1';
+  var CONFIG_CACHE_KEY = 'equipmentScanner.config.v1';
+  var CONFIG_TIMEOUT_MS = 20000;
+  var SUBMIT_TIMEOUT_MS = 45000;
+
+  var SCAN_ERRORS = {
+    EMPTY:      { title: 'Empty Code',            detail: 'The code has no content.' },
+    TOO_LONG:   { title: 'Code Too Long',         detail: 'This code is longer than an equipment link.' },
+    NOT_LINK:   { title: 'Not an Equipment Code', detail: 'This code does not contain a web link.' },
+    WRONG_SITE: { title: 'Not an Equipment Code', detail: 'This code links to a different website.' },
+    WRONG_FORM: { title: 'Wrong Form',            detail: 'This code links to a different Jotform form.' },
+    NO_DETAILS: { title: 'No Equipment Details',  detail: 'The link has no equipment information.' },
+    DEFAULT:    { title: 'Code Not Accepted',     detail: 'This code cannot be added.' }
+  };
+
+  var el = {};
+  var state = { items: [], pendingId: '', submitting: false, soundOn: true };
+  var cam = { stream: null, track: null, running: false, starting: false, busy: false, timer: null, torchOn: false, pauseUntil: 0, resumeOnShow: false };
+  var detector = null;
+  var detectorPromise = null;
+  var lastSeen = { raw: '', time: 0 };
+  var clearArmed = false;
+  var clearTimer = null;
+  var flashTimer = null;
+  var audioCtx = null;
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  var TAG_FIELDS = [];
+  var TITLE_FIELDS = [];
+  var META_FIELDS = [];
+
+  function fieldsFor(kind) {
+    return BOOT.rules.fields.filter(function (f) { return f.display === kind; });
+  }
+
+
+  /* ---------- Parsing (keep the same as parseScan_ in Code.gs) ---------- */
+
+  function parseScan(text, rules) {
+    var raw = String(text === null || text === undefined ? '' : text).trim();
+    var out = { ok: false, error: '', raw: raw, values: {}, other: {}, key: '' };
+    if (!raw) { out.error = 'EMPTY'; return out; }
+    if (raw.length > rules.maxScanLength) { out.error = 'TOO_LONG'; return out; }
+
+    var match = /^https?:\/\/([^\/?#\s]+)([^?]*)(?:\?([\s\S]*))?$/i.exec(raw);
+    if (!match) { out.error = 'NOT_LINK'; return out; }
+    var host = match[1].toLowerCase();
+    var path = match[2] || '';
+    var query = match[3] || '';
+
+    var hostText = String(rules.acceptedHostText || '').toLowerCase();
+    if (hostText && host.indexOf(hostText) === -1) { out.error = 'WRONG_SITE'; return out; }
+
+    var formIds = rules.acceptedFormIds || [];
+    if (formIds.length) {
+      var idMatch = /\d{10,}/.exec(path);
+      if (!idMatch || formIds.indexOf(idMatch[0]) === -1) { out.error = 'WRONG_FORM'; return out; }
+    }
+
+    var params = {};
+    var pieces = query.split('&');
+    for (var i = 0; i < pieces.length; i++) {
+      var piece = pieces[i];
+      if (!piece) continue;
+      var eq = piece.indexOf('=');
+      var name = decodeValue(eq === -1 ? piece : piece.slice(0, eq), rules.plusAsSpace).trim();
+      var value = eq === -1 ? '' : decodeValue(piece.slice(eq + 1), rules.plusAsSpace).trim();
+      if (!name) continue;
+      value = value.slice(0, rules.maxValueLength);
+      var lower = name.toLowerCase();
+      if (!params.hasOwnProperty(lower)) {
+        params[lower] = { name: name, value: value };
+      } else if (value) {
+        params[lower].value = params[lower].value ? params[lower].value + ', ' + value : value;
+      }
+    }
+
+    var mapped = {};
+    var hasValue = false;
+    for (var f = 0; f < rules.fields.length; f++) {
+      var param = String(rules.fields[f].param);
+      var entry = params[param.toLowerCase()];
+      var fieldValue = entry ? entry.value : '';
+      out.values[param] = fieldValue;
+      mapped[param.toLowerCase()] = true;
+      if (fieldValue) hasValue = true;
+    }
+    for (var k in params) {
+      if (params.hasOwnProperty(k) && !mapped[k]) out.other[params[k].name] = params[k].value;
+    }
+    if (!hasValue) { out.error = 'NO_DETAILS'; return out; }
+
+    for (var q = 0; q < rules.keyParams.length; q++) {
+      var keyParam = String(rules.keyParams[q]).toLowerCase();
+      var keyValue = params[keyParam] ? params[keyParam].value : '';
+      if (keyValue) { out.key = keyParam + ':' + keyValue.replace(/\s+/g, ' ').toUpperCase(); break; }
+    }
+    if (!out.key) out.key = 'raw:' + raw.replace(/\s+/g, ' ').toUpperCase();
+
+    out.ok = true;
+    return out;
+  }
+
+  function decodeValue(text, plusAsSpace) {
+    var s = String(text);
+    if (plusAsSpace) s = s.replace(/\+/g, ' ');
+    return s.replace(/(?:%[0-9A-Fa-f]{2})+/g, function (seq) {
+      try { return decodeURIComponent(seq); } catch (e) { return seq; }
+    });
+  }
+
+
+  /* ---------- Start ---------- */
+
+  function start() {
+    document.getElementById('retryBtn').addEventListener('click', loadConfig);
+    loadConfig();
+  }
+
+  function loadConfig() {
+    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(API_URL)) {
+      showLoad('Setup Needed', 'API_URL in index.html is not set. Paste the Apps Script web app URL that ends in /exec.', true, false);
+      return;
+    }
+    showLoad('Loading Settings', 'Connecting to the server.', false, false);
+    fetchJson(API_URL + '?action=config', null, CONFIG_TIMEOUT_MS).then(function (data) {
+      if (!data || !data.rules || !data.rules.fields) throw new Error('The server reply is not valid.');
+      try { window.localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify(data)); } catch (e) {}
+      begin(data, false);
+    }).catch(function (err) {
+      var cached = readCachedConfig();
+      if (cached) { begin(cached, true); return; }
+      showLoad('Cannot Load Settings',
+        'The server did not respond. Check the internet connection, then press Try Again. Details: ' + err.message, true, true);
+    });
+  }
+
+  function readCachedConfig() {
+    try {
+      var data = JSON.parse(window.localStorage.getItem(CONFIG_CACHE_KEY) || 'null');
+      return data && data.rules && data.rules.fields ? data : null;
+    } catch (e) { return null; }
+  }
+
+  function begin(config, fromCache) {
+    if (BOOT) return;
+    BOOT = config;
+    document.getElementById('loadOverlay').hidden = true;
+    init();
+    if (fromCache) {
+      setStatus('warn', 'Using Saved Settings', 'The server did not respond. Scanning works. Submit needs a connection.');
+    }
+  }
+
+  function showLoad(title, detail, isError, canRetry) {
+    document.getElementById('loadOverlay').hidden = false;
+    document.getElementById('loadBox').classList.toggle('is-error', !!isError);
+    document.getElementById('loadTitle').textContent = title;
+    document.getElementById('loadDetail').textContent = detail;
+    document.getElementById('retryBtn').hidden = !canRetry;
+  }
+
+  // GET when body is null. POST as text/plain (no CORS preflight) when body is set.
+  function fetchJson(url, body, timeoutMs) {
+    var controller = window.AbortController ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+    var options = { method: body ? 'POST' : 'GET', redirect: 'follow', cache: 'no-store' };
+    if (controller) options.signal = controller.signal;
+    if (body) {
+      options.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+      options.body = JSON.stringify(body);
+    }
+    return fetch(url, options).then(function (res) {
+      if (!res.ok) throw new Error('Server status ' + res.status + '.');
+      return res.text();
+    }).then(function (text) {
+      clearTimeout(timer);
+      try { return JSON.parse(text); } catch (e) {
+        throw new Error('The server did not send data. Check that web app access is set to Anyone.');
+      }
+    }, function (err) {
+      clearTimeout(timer);
+      if (err && err.name === 'AbortError') throw new Error('The server took too long to reply.');
+      if (err instanceof TypeError) throw new Error('No connection to the server. Check the internet connection and the web app access setting (Anyone).');
+      throw err;
+    });
+  }
+
+  function init() {
+    [
+      'appTitle', 'soundBtn', 'crewField', 'crewSlot', 'crewError', 'dateField', 'dateInput', 'dateError',
+      'viewfinder', 'video', 'cameraBtn', 'torchBtn', 'photoBtn', 'photoInput',
+      'status', 'statusTitle', 'statusDetail', 'manualInput', 'manualBtn',
+      'clearBtn', 'countText', 'itemList', 'emptyState', 'versionText',
+      'submitBtn', 'submitMessage', 'doneOverlay', 'doneBox', 'doneTitle', 'doneDetail', 'doneList', 'doneBtn'
+    ].forEach(function (id) { el[id] = document.getElementById(id); });
+
+    TAG_FIELDS = fieldsFor('tag');
+    TITLE_FIELDS = fieldsFor('title');
+    META_FIELDS = fieldsFor('meta');
+
+    el.appTitle.textContent = BOOT.appTitle;
+    document.title = BOOT.appTitle;
+    el.versionText.textContent = 'Page Version ' + PAGE_VERSION + ' | Server Version ' + BOOT.version;
+
+    buildCrewControl();
+    el.dateInput.value = todayLocal();
+    loadSoundSetting();
+    restoreDraft();
+    bindEvents();
+    render();
+
+    prepareDetector().then(function (d) {
+      if (!d && typeof window.jsQR !== 'function') {
+        setStatus('warn', 'Scanner Library Not Loaded',
+          'The camera cannot read codes. Check the internet connection and reload the page. Scanner or Manual Entry still works.');
+      }
+    });
+  }
+
+  function bindEvents() {
+    el.soundBtn.addEventListener('click', toggleSound);
+    el.cameraBtn.addEventListener('click', function () {
+      if (cam.running) stopCamera(false); else startCamera();
+    });
+    el.torchBtn.addEventListener('click', toggleTorch);
+    el.photoBtn.addEventListener('click', function () {
+      ensureAudio();
+      el.photoInput.value = '';
+      el.photoInput.click();
+    });
+    el.photoInput.addEventListener('change', onPhotoSelected);
+    el.manualBtn.addEventListener('click', addManual);
+    el.manualInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); addManual(); }
+    });
+    el.clearBtn.addEventListener('click', onClearClick);
+    el.itemList.addEventListener('click', onListClick);
+    el.submitBtn.addEventListener('click', submit);
+    el.doneBtn.addEventListener('click', closeDone);
+    el.dateInput.addEventListener('change', onDetailsChange);
+    el.dateInput.addEventListener('input', onDetailsChange);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !el.doneOverlay.hidden) closeDone();
+    });
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', function () { stopCamera(true); });
+    document.addEventListener('pointerdown', ensureAudio, { once: true });
+  }
+
+
+  /* ---------- Submission Details ---------- */
+
+  function buildCrewControl() {
+    var crews = BOOT.crews || [];
+    var control;
+    if (crews.length) {
+      control = document.createElement('select');
+      addOption(control, '', 'Select Crew');
+      crews.forEach(function (c) { addOption(control, c, c); });
+    } else {
+      control = document.createElement('input');
+      control.type = 'text';
+      control.maxLength = 100;
+      control.autocomplete = 'off';
+      control.setAttribute('autocapitalize', 'words');
+      if (crews.length) {
+        var list = document.createElement('datalist');
+        list.id = 'crewList';
+        crews.forEach(function (c) {
+          var o = document.createElement('option');
+          o.value = c;
+          list.appendChild(o);
+        });
+        el.crewSlot.appendChild(list);
+        control.setAttribute('list', 'crewList');
+      }
+    }
+    control.id = 'crewInput';
+    el.crewSlot.insertBefore(control, el.crewSlot.firstChild);
+    el.crew = control;
+    control.addEventListener('input', onDetailsChange);
+    control.addEventListener('change', onDetailsChange);
+  }
+
+  function addOption(select, value, text) {
+    var o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    select.appendChild(o);
+  }
+
+  function setCrewValue(value) {
+    if (el.crew.tagName === 'SELECT') {
+      for (var i = 0; i < el.crew.options.length; i++) {
+        if (el.crew.options[i].value === value) { el.crew.value = value; return; }
+      }
+      return;
+    }
+    el.crew.value = value;
+  }
+
+  function onDetailsChange() {
+    state.pendingId = '';
+    clearFieldError(el.crewField, el.crewError);
+    clearFieldError(el.dateField, el.dateError);
+    hideSubmitMessage();
+    saveDraft();
+  }
+
+  function validateDetails() {
+    var ok = true;
+    if (BOOT.requireCrew && !el.crew.value.trim()) {
+      showFieldError(el.crewField, el.crewError, el.crew.tagName === 'SELECT' ? 'Select the crew.' : 'Enter the crew.');
+      ok = false;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(el.dateInput.value)) {
+      showFieldError(el.dateField, el.dateError, 'Enter the date.');
+      ok = false;
+    }
+    return ok;
+  }
+
+  function showFieldError(field, msgEl, text) {
+    field.classList.add('has-error');
+    msgEl.textContent = text;
+    msgEl.hidden = false;
+  }
+
+  function clearFieldError(field, msgEl) {
+    field.classList.remove('has-error');
+    msgEl.hidden = true;
+  }
+
+  function todayLocal() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+
+  /* ---------- Scan Handling ---------- */
+
+  // Returns 'added', 'duplicate', 'invalid', 'full', or 'ignored'.
+  function handleScan(text, source, quiet) {
+    if (!el.doneOverlay.hidden) return 'ignored';
+    var raw = String(text === null || text === undefined ? '' : text).trim();
+    var now = Date.now();
+
+    if (source === 'camera') {
+      if (now < cam.pauseUntil) return 'ignored';
+      if (raw === lastSeen.raw && now - lastSeen.time < SAME_CODE_COOLDOWN_MS) {
+        lastSeen.time = now;
+        return 'ignored';
+      }
+      lastSeen.raw = raw;
+      lastSeen.time = now;
+    }
+
+    var result = parseScan(raw, BOOT.rules);
+    if (!result.ok) {
+      if (!quiet) {
+        var info = SCAN_ERRORS[result.error] || SCAN_ERRORS.DEFAULT;
+        setStatus('error', info.title, info.detail);
+        feedback('error');
+      }
+      return 'invalid';
+    }
+
+    if (!BOOT.allowDuplicates) {
+      var existing = findByKey(result.key);
+      if (existing) {
+        if (!quiet) {
+          setStatus('warn', 'Already in List', describe(result.values));
+          feedback('warn');
+        }
+        markRow(existing.id, 'is-hit');
+        return 'duplicate';
+      }
+    }
+
+    if (state.items.length >= BOOT.maxItems) {
+      if (!quiet) {
+        setStatus('error', 'List Is Full', 'Submit this list before you scan more. The limit is ' + BOOT.maxItems + ' items.');
+        feedback('error');
+      }
+      return 'full';
+    }
+
+    var item = { id: makeId(), key: result.key, raw: result.raw, values: result.values };
+    state.items.push(item);
+    onListChanged();
+    render(item.id);
+    if (!quiet) {
+      setStatus('ok', 'Added', describe(result.values));
+      feedback('ok');
+    }
+    if (source === 'camera') cam.pauseUntil = now + PAUSE_AFTER_ADD_MS;
+    return 'added';
+  }
+
+  function handleBatch(texts) {
+    if (!texts.length) {
+      setStatus('error', 'No QR Code Found', 'Take the photo closer. Keep the whole code in view and in focus.');
+      feedback('error');
+      return;
+    }
+    if (texts.length === 1) {
+      handleScan(texts[0], 'photo', false);
+      return;
+    }
+    var counts = { added: 0, duplicate: 0, invalid: 0, full: 0, ignored: 0 };
+    texts.forEach(function (t) { counts[handleScan(t, 'photo', true)]++; });
+    var detail = 'Added ' + counts.added + ', Already in List ' + counts.duplicate + ', Not Accepted ' + (counts.invalid + counts.full);
+    setStatus(counts.added ? 'ok' : 'warn', 'Photo Scanned', detail);
+    feedback(counts.added ? 'ok' : 'warn');
+  }
+
+  function addManual() {
+    var value = el.manualInput.value;
+    if (!value.trim()) return;
+    ensureAudio();
+    handleScan(value, 'manual', false);
+    el.manualInput.value = '';
+  }
+
+  function findByKey(key) {
+    for (var i = 0; i < state.items.length; i++) {
+      if (state.items[i].key === key) return state.items[i];
+    }
+    return null;
+  }
+
+  function indexById(id) {
+    for (var i = 0; i < state.items.length; i++) {
+      if (state.items[i].id === id) return i;
+    }
+    return -1;
+  }
+
+  function joinValues(values, fields) {
+    return fields.map(function (f) { return values[f.param] || ''; }).filter(Boolean).join(' ');
+  }
+
+  function describe(values) {
+    var text = [joinValues(values, TAG_FIELDS), joinValues(values, TITLE_FIELDS)].filter(Boolean).join(' ');
+    return text || joinValues(values, META_FIELDS);
+  }
+
+  function onListChanged() {
+    state.pendingId = '';
+    disarmClear();
+    hideSubmitMessage();
+    saveDraft();
+  }
+
+
+  /* ---------- List ---------- */
+
+  function render(newId) {
+    var list = el.itemList;
+    list.textContent = '';
+    var frag = document.createDocumentFragment();
+    for (var i = state.items.length - 1; i >= 0; i--) {
+      frag.appendChild(buildRow(state.items[i], newId));
+    }
+    list.appendChild(frag);
+
+    var n = state.items.length;
+    el.countText.textContent = n;
+    list.hidden = n === 0;
+    el.emptyState.hidden = n > 0;
+    el.clearBtn.disabled = n === 0 || state.submitting;
+    el.submitBtn.disabled = n === 0 || state.submitting;
+    if (state.submitting) el.submitBtn.textContent = 'Submitting…';
+    else el.submitBtn.textContent = n ? 'Submit ' + n + (n === 1 ? ' Item' : ' Items') : 'Submit';
+  }
+
+  function buildRow(item, newId) {
+    var li = document.createElement('li');
+    li.className = 'item' + (item.id === newId ? ' is-new' : '');
+    li.setAttribute('data-id', item.id);
+
+    var tag = joinValues(item.values, TAG_FIELDS);
+    if (tag) {
+      var tagEl = document.createElement('span');
+      tagEl.className = 'item-tag';
+      tagEl.textContent = tag;
+      li.appendChild(tagEl);
+    }
+
+    var body = document.createElement('div');
+    body.className = 'item-body';
+    var title = document.createElement('p');
+    title.className = 'item-title';
+    title.textContent = joinValues(item.values, TITLE_FIELDS) || 'No Description';
+    body.appendChild(title);
+
+    var meta = document.createElement('p');
+    meta.className = 'item-meta';
+    META_FIELDS.forEach(function (f) {
+      var v = item.values[f.param];
+      if (!v) return;
+      var pair = document.createElement('span');
+      var label = document.createElement('span');
+      label.className = 'meta-label';
+      label.textContent = f.label;
+      var value = document.createElement('span');
+      value.className = 'meta-value';
+      value.textContent = v;
+      pair.appendChild(label);
+      pair.appendChild(document.createTextNode(' '));
+      pair.appendChild(value);
+      meta.appendChild(pair);
+    });
+    if (meta.childNodes.length) body.appendChild(meta);
+    li.appendChild(body);
+
+    var remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'item-remove';
+    remove.setAttribute('data-remove', item.id);
+    remove.setAttribute('aria-label', 'Remove ' + (describe(item.values) || 'Item'));
+    remove.textContent = 'Remove';
+    li.appendChild(remove);
+    return li;
+  }
+
+  function markRow(id, cls) {
+    var row = el.itemList.querySelector('li[data-id="' + id + '"]');
+    if (!row) return;
+    row.classList.remove('is-new', 'is-hit');
+    void row.offsetWidth;
+    row.classList.add(cls);
+  }
+
+  function onListClick(e) {
+    var btn = e.target.closest ? e.target.closest('button[data-remove]') : null;
+    if (!btn) return;
+    var idx = indexById(btn.getAttribute('data-remove'));
+    if (idx === -1) return;
+    var visualIndex = state.items.length - 1 - idx;
+    var removed = state.items.splice(idx, 1)[0];
+    onListChanged();
+    render();
+    setStatus('info', 'Removed', describe(removed.values));
+
+    var buttons = el.itemList.querySelectorAll('button[data-remove]');
+    if (buttons.length) buttons[Math.min(visualIndex, buttons.length - 1)].focus();
+    else el.manualInput.focus();
+  }
+
+  function onClearClick() {
+    if (!state.items.length) return;
+    if (!clearArmed) {
+      clearArmed = true;
+      el.clearBtn.textContent = 'Confirm Clear All';
+      el.clearBtn.classList.add('is-armed');
+      clearTimer = setTimeout(disarmClear, 3000);
+      return;
+    }
+    var n = state.items.length;
+    state.items = [];
+    onListChanged();
+    render();
+    setStatus('info', 'List Cleared', n + (n === 1 ? ' item removed.' : ' items removed.'));
+  }
+
+  function disarmClear() {
+    clearArmed = false;
+    clearTimeout(clearTimer);
+    el.clearBtn.textContent = 'Clear All';
+    el.clearBtn.classList.remove('is-armed');
+  }
+
+
+  /* ---------- Camera ---------- */
+
+  function prepareDetector() {
+    if (detectorPromise) return detectorPromise;
+    detectorPromise = new Promise(function (resolve) {
+      if (!('BarcodeDetector' in window)) { resolve(null); return; }
+      try {
+        window.BarcodeDetector.getSupportedFormats().then(function (formats) {
+          resolve(formats.indexOf('qr_code') !== -1 ? new window.BarcodeDetector({ formats: ['qr_code'] }) : null);
+        }).catch(function () { resolve(null); });
+      } catch (e) { resolve(null); }
+    }).then(function (d) { detector = d; return d; });
+    return detectorPromise;
+  }
+
+  function startCamera() {
+    if (cam.running || cam.starting) return;
+    ensureAudio();
+    if (!window.isSecureContext) {
+      setStatus('error', 'Secure Link Needed', 'The camera works only on https pages. Open the scanner with its https link.');
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('error', 'Camera Not Available', 'This browser cannot open the live camera. Use Photo Scan instead.');
+      return;
+    }
+    cam.starting = true;
+    el.cameraBtn.disabled = true;
+    el.cameraBtn.textContent = 'Starting…';
+
+    navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    }).then(function (stream) {
+      cam.stream = stream;
+      cam.track = stream.getVideoTracks()[0] || null;
+      el.video.srcObject = stream;
+      return el.video.play();
+    }).then(function () {
+      return prepareDetector();
+    }).then(function () {
+      cam.starting = false;
+      cam.running = true;
+      el.viewfinder.classList.add('is-live');
+      el.cameraBtn.disabled = false;
+      el.cameraBtn.textContent = 'Stop Camera';
+      setTimeout(setupTorch, 500);
+      setStatus('info', 'Camera On', 'Hold the phone steady. Keep the QR code inside the frame.');
+      scheduleScan(0);
+    }).catch(function (err) {
+      cam.starting = false;
+      stopCamera(true);
+      showCameraError(err);
+    });
+  }
+
+  function stopCamera(silent) {
+    cam.running = false;
+    clearTimeout(cam.timer);
+    if (cam.stream) cam.stream.getTracks().forEach(function (t) { t.stop(); });
+    cam.stream = null;
+    cam.track = null;
+    cam.torchOn = false;
+    cam.busy = false;
+    if (el.video) el.video.srcObject = null;
+    if (!el.cameraBtn) return;
+    el.viewfinder.classList.remove('is-live');
+    el.cameraBtn.disabled = false;
+    el.cameraBtn.textContent = 'Start Camera';
+    el.torchBtn.hidden = true;
+    el.torchBtn.textContent = 'Light On';
+    el.torchBtn.setAttribute('aria-pressed', 'false');
+    if (!silent) setStatus('info', 'Camera Off', 'Press Start Camera to scan again.');
+  }
+
+  function showCameraError(err) {
+    var name = err && err.name ? err.name : '';
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      if (isEmbedded()) {
+        setStatus('error', 'Camera Blocked',
+          'The camera cannot open inside an embedded page. Open the scanner link directly in the browser. You can also use Photo Scan.');
+      } else {
+        setStatus('error', 'Camera Blocked',
+          'Camera access for this website is denied. Open the website settings from the address bar, set Camera to Allow, then reload the page. You can also use Photo Scan.');
+      }
+    } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      setStatus('error', 'No Camera Found', 'The browser cannot find a camera. Use Photo Scan or Scanner or Manual Entry.');
+    } else if (name === 'NotReadableError') {
+      setStatus('error', 'Camera Busy', 'Another app is using the camera. Close that app, then press Start Camera.');
+    } else {
+      setStatus('error', 'Camera Error', 'The camera did not start (' + (name || 'unknown error') + '). Use Photo Scan instead.');
+    }
+    feedback('error');
+  }
+
+  function isEmbedded() {
+    try { return window.self !== window.top; } catch (e) { return true; }
+  }
+
+  function scheduleScan(delay) {
+    clearTimeout(cam.timer);
+    cam.timer = setTimeout(scanFrame, delay);
+  }
+
+  function scanFrame() {
+    if (!cam.running) return;
+    var video = el.video;
+    if (cam.busy || video.readyState < 2 || !video.videoWidth) {
+      scheduleScan(SCAN_INTERVAL_MS);
+      return;
+    }
+    cam.busy = true;
+    decodeLive(video).then(function (texts) {
+      texts.forEach(function (t) { handleScan(t, 'camera', false); });
+    }).catch(function () {
+      // Frame errors are normal during focus changes. Try the next frame.
+    }).then(function () {
+      cam.busy = false;
+      if (cam.running) scheduleScan(SCAN_INTERVAL_MS);
+    });
+  }
+
+  function decodeLive(video) {
+    if (detector) {
+      return detector.detect(video).then(function (codes) {
+        return codes.map(function (c) { return c.rawValue; }).filter(Boolean);
+      });
+    }
+    // jsQR: read the center square at up to LIVE_DECODE_SIZE pixels.
+    var w = video.videoWidth;
+    var h = video.videoHeight;
+    var side = Math.min(w, h);
+    var size = Math.min(side, LIVE_DECODE_SIZE);
+    return Promise.resolve(runJsQR(video, (w - side) / 2, (h - side) / 2, side, side, size, size, 'dontInvert'));
+  }
+
+  function decodeImage(img) {
+    var fallback = function () {
+      var sizes = [1600, 1000, 640];
+      for (var i = 0; i < sizes.length; i++) {
+        var scale = Math.min(1, sizes[i] / Math.max(img.width, img.height));
+        var w = Math.max(1, Math.round(img.width * scale));
+        var h = Math.max(1, Math.round(img.height * scale));
+        var found = runJsQR(img.source, 0, 0, img.width, img.height, w, h, 'attemptBoth');
+        if (found.length) return found;
+      }
+      return [];
+    };
+    if (detector) {
+      return detector.detect(img.source).then(function (codes) {
+        var texts = codes.map(function (c) { return c.rawValue; }).filter(Boolean);
+        return texts.length ? texts : fallback();
+      }).catch(fallback);
+    }
+    return Promise.resolve(fallback());
+  }
+
+  function runJsQR(source, sx, sy, sw, sh, dw, dh, inversion) {
+    if (typeof window.jsQR !== 'function') return [];
+    canvas.width = dw;
+    canvas.height = dh;
+    ctx.drawImage(source, sx, sy, sw, sh, 0, 0, dw, dh);
+    var data = ctx.getImageData(0, 0, dw, dh);
+    var code = window.jsQR(data.data, dw, dh, { inversionAttempts: inversion });
+    return code && code.data ? [code.data] : [];
+  }
+
+  function setupTorch() {
+    if (!cam.running || !cam.track || typeof cam.track.getCapabilities !== 'function') return;
+    try {
+      var caps = cam.track.getCapabilities();
+      if (caps && caps.torch) el.torchBtn.hidden = false;
+    } catch (e) { /* Light control not supported. */ }
+  }
+
+  function toggleTorch() {
+    if (!cam.track) return;
+    var next = !cam.torchOn;
+    cam.track.applyConstraints({ advanced: [{ torch: next }] }).then(function () {
+      cam.torchOn = next;
+      el.torchBtn.textContent = next ? 'Light Off' : 'Light On';
+      el.torchBtn.setAttribute('aria-pressed', next ? 'true' : 'false');
+    }).catch(function () {
+      el.torchBtn.hidden = true;
+      setStatus('warn', 'Light Not Available', 'This camera does not allow light control.');
+    });
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      if (cam.running) {
+        cam.resumeOnShow = true;
+        stopCamera(true);
+      }
+    } else if (cam.resumeOnShow) {
+      cam.resumeOnShow = false;
+      startCamera();
+    }
+  }
+
+
+  /* ---------- Photo Scan ---------- */
+
+  function onPhotoSelected() {
+    var file = el.photoInput.files && el.photoInput.files[0];
+    if (!file) return;
+    setStatus('info', 'Reading Photo', 'Looking for QR codes.');
+    loadImage(file).then(function (img) {
+      return prepareDetector().then(function () {
+        return decodeImage(img);
+      }).then(function (texts) {
+        img.release();
+        return texts;
+      });
+    }).then(handleBatch).catch(function () {
+      setStatus('error', 'Photo Not Read', 'The photo cannot be opened. Take the photo again.');
+      feedback('error');
+    });
+  }
+
+  function loadImage(file) {
+    if (window.createImageBitmap) {
+      return window.createImageBitmap(file).then(function (bmp) {
+        return { source: bmp, width: bmp.width, height: bmp.height, release: function () { try { bmp.close(); } catch (e) {} } };
+      }).catch(function () { return loadImageElement(file); });
+    }
+    return loadImageElement(file);
+  }
+
+  function loadImageElement(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        resolve({ source: img, width: img.naturalWidth, height: img.naturalHeight, release: function () { URL.revokeObjectURL(url); } });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+      img.src = url;
+    });
+  }
+
+
+  /* ---------- Feedback ---------- */
+
+  function setStatus(kind, title, detail) {
+    el.status.className = 'status status--' + kind;
+    el.statusTitle.textContent = title;
+    el.statusDetail.textContent = detail || '';
+  }
+
+  function feedback(kind) {
+    el.viewfinder.setAttribute('data-flash', kind);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () { el.viewfinder.removeAttribute('data-flash'); }, 450);
+
+    if (navigator.vibrate) {
+      try { navigator.vibrate(kind === 'ok' ? 60 : kind === 'warn' ? [40, 60, 40] : [120, 60, 120]); } catch (e) {}
+    }
+    beep(kind);
+  }
+
+  function ensureAudio() {
+    try {
+      if (!audioCtx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) { /* Sound not available. */ }
+  }
+
+  function playTone(freq, offset, duration) {
+    var t = audioCtx.currentTime + offset;
+    var osc = audioCtx.createOscillator();
+    var gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.15, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + duration + 0.02);
+  }
+
+  function beep(kind) {
+    if (!state.soundOn || !audioCtx) return;
+    try {
+      if (kind === 'ok') {
+        playTone(1400, 0, 0.09);
+      } else if (kind === 'warn') {
+        playTone(900, 0, 0.08);
+        playTone(900, 0.14, 0.08);
+      } else if (kind === 'error') {
+        playTone(240, 0, 0.28);
+      }
+    } catch (e) { /* Sound not available. */ }
+  }
+
+  function loadSoundSetting() {
+    try { state.soundOn = window.localStorage.getItem(SOUND_KEY) !== 'off'; } catch (e) { state.soundOn = true; }
+    renderSound();
+  }
+
+  function toggleSound() {
+    state.soundOn = !state.soundOn;
+    try { window.localStorage.setItem(SOUND_KEY, state.soundOn ? 'on' : 'off'); } catch (e) {}
+    renderSound();
+    if (state.soundOn) { ensureAudio(); beep('ok'); }
+  }
+
+  function renderSound() {
+    el.soundBtn.textContent = state.soundOn ? 'Sound On' : 'Sound Off';
+    el.soundBtn.setAttribute('aria-pressed', state.soundOn ? 'true' : 'false');
+  }
+
+
+  /* ---------- Draft (saved on this device) ---------- */
+
+  function saveDraft() {
+    try {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        items: state.items.map(function (i) { return i.raw; }),
+        crew: el.crew ? el.crew.value : '',
+        date: el.dateInput.value
+      }));
+    } catch (e) { /* Storage not available. The list still works. */ }
+  }
+
+  function restoreDraft() {
+    var draft = null;
+    try { draft = JSON.parse(window.localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { draft = null; }
+    if (!draft) return;
+    if (draft.crew) setCrewValue(String(draft.crew));
+
+    var restored = 0;
+    (draft.items || []).forEach(function (raw) {
+      var r = parseScan(raw, BOOT.rules);
+      if (!r.ok) return;
+      if (!BOOT.allowDuplicates && findByKey(r.key)) return;
+      if (state.items.length >= BOOT.maxItems) return;
+      state.items.push({ id: makeId(), key: r.key, raw: r.raw, values: r.values });
+      restored++;
+    });
+
+    if (restored) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(draft.date || '')) el.dateInput.value = draft.date;
+      setStatus('info', 'Unsent List Restored',
+        restored + (restored === 1 ? ' item' : ' items') + ' from the last session. Check the date before you submit.');
+    }
+  }
+
+  /* ---------- Submit ---------- */
+
+  function submit() {
+    if (state.submitting || !state.items.length) return;
+    hideSubmitMessage();
+    if (!validateDetails()) {
+      showSubmitMessage('Complete the crew and date, then submit.');
+      return;
+    }
+    if (!state.pendingId) state.pendingId = makeId();
+
+    var sentIds = {};
+    state.items.forEach(function (i) { sentIds[i.id] = true; });
+    var payload = {
+      submissionId: state.pendingId,
+      crew: el.crew.value.trim(),
+      date: el.dateInput.value,
+      scans: state.items.map(function (i) { return i.raw; })
+    };
+
+    state.submitting = true;
+    render();
+
+    fetchJson(API_URL, { action: 'submit', payload: payload }, SUBMIT_TIMEOUT_MS)
+      .then(function (res) { onSubmitResult(res, sentIds); })
+      .catch(onSubmitFailure);
+  }
+
+  function onSubmitResult(res, sentIds) {
+    state.submitting = false;
+    if (!res || !res.ok) {
+      render();
+      showSubmitMessage((res && res.message) || 'The submission failed. Submit again.');
+      feedback('error');
+      return;
+    }
+    // Keep items scanned while the submission was in progress.
+    state.items = state.items.filter(function (i) { return !sentIds[i.id]; });
+    state.pendingId = '';
+    el.dateInput.value = todayLocal();
+    saveDraft();
+    render();
+    showDone(res);
+    feedback('ok');
+  }
+
+  function onSubmitFailure(err) {
+    state.submitting = false;
+    render();
+    var detail = err && err.message ? err.message : String(err || '');
+    showSubmitMessage('No reply from the server. The list is still here. Check the connection and submit again. ' +
+      'The server does not save the same list twice.' + (detail ? ' Details: ' + detail : ''));
+    feedback('error');
+  }
+
+  function showSubmitMessage(text) {
+    el.submitMessage.textContent = text;
+    el.submitMessage.hidden = false;
+  }
+
+  function hideSubmitMessage() {
+    if (el.submitMessage) el.submitMessage.hidden = true;
+  }
+
+  function showDone(res) {
+    el.doneBox.classList.toggle('is-repeat', !!res.repeat);
+    el.doneTitle.textContent = res.repeat ? 'Already Submitted' : 'Submitted';
+    el.doneDetail.textContent = res.repeat
+      ? 'This list was saved before. No new rows were added.'
+      : 'The list is saved to the log.';
+
+    el.doneList.textContent = '';
+    addDonePair('Items', String(res.count));
+    if (res.duplicatesRemoved) addDonePair('Duplicates Removed', String(res.duplicatesRemoved));
+    addDonePair('Crew', res.crew || '');
+    addDonePair('Date', res.date || '');
+    addDonePair('Submitted At', res.submittedAt || '');
+    addDonePair('Submission ID', res.submissionId || '');
+
+    el.doneOverlay.hidden = false;
+    el.doneBtn.focus();
+  }
+
+  function addDonePair(label, value) {
+    var dt = document.createElement('dt');
+    dt.textContent = label;
+    var dd = document.createElement('dd');
+    dd.textContent = value;
+    el.doneList.appendChild(dt);
+    el.doneList.appendChild(dd);
+  }
+
+  function closeDone() {
+    el.doneOverlay.hidden = true;
+    lastSeen.raw = '';
+    lastSeen.time = 0;
+    if (state.items.length) {
+      var n = state.items.length;
+      setStatus('info', 'Ready', n + (n === 1 ? ' item was' : ' items were') + ' scanned during the submission. ' +
+        (n === 1 ? 'It is' : 'They are') + ' still in the list.');
+    } else {
+      setStatus('info', 'Ready', 'Scan the next list.');
+    }
+  }
+
+
+  /* ---------- Utilities ---------- */
+
+  function makeId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+    var b = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(b);
+    else for (var i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    var h = Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
